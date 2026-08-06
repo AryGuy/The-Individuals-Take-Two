@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHAPTER 6</title>
+    <style>
+        :root { --bg: #0e0e0e; --page-bg: #151515; --white-raw: 255, 255, 255; --spread-ratio: 1.33; --panel-bg: rgba(20, 20, 20, 0.95); --border-color: #333; --border-light: #222; --input-bg: #000; --text-main: #fff; }
+        body.light-theme { --bg: #e5e5e5; --page-bg: #ffffff; --white-raw: 0, 0, 0; --panel-bg: rgba(255, 255, 255, 0.95); --border-color: #ccc; --border-light: #ddd; --input-bg: #fff; --text-main: #000; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; color: var(--text-main); }
+        .book-container { width: 95%; max-width: 1400px; margin: 20px 0; }
+        .book-spread { display: grid; grid-template-columns: 1fr 1fr; width: 100%; aspect-ratio: var(--spread-ratio); background: var(--page-bg); border: 1px solid var(--border-light); position: relative; overflow: hidden; }
+        .book-spread::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border-light); z-index: 5; }
+        .page { position: relative; display: flex; flex-direction: column; height: 100%; padding: 60px 80px; box-sizing: border-box; overflow: hidden; }
+        @media (max-width: 900px) {
+            .book-container { margin: 10px 0; width: 100%; }
+            .book-spread { grid-template-columns: 1fr; aspect-ratio: auto !important; height: auto; border: none; overflow: visible; }
+            .book-spread::before { display: none; }
+            .page { padding: 40px 25px; height: auto; min-height: 400px; border-bottom: 1px solid var(--border-light); }
+            .settings-panel { left: 0 !important; right: 0 !important; bottom: 0 !important; flex-direction: row !important; justify-content: space-between; width: 100%; border-left: none; border-right: none; padding: 15px 20px !important; box-sizing: border-box; }
+            .footer-nav { margin-bottom: 100px; }
+        }
+        @media (max-width: 900px) and (orientation: landscape) {
+            .book-spread { grid-template-columns: 1fr 1fr; aspect-ratio: var(--spread-ratio) !important; overflow: hidden; }
+            .book-spread::before { display: block; } .page { padding: 30px; }
+        }
+        .content { width: 100%; height: 100%; overflow: hidden; }
+        .content p { font-size: 1.1rem; line-height: 1.7; margin-bottom: 20px; color: rgba(var(--white-raw), 0.8); }
+        .d { display: flex !important; background: rgba(var(--white-raw), 0.05); padding: 12px; border-radius: 4px; margin-bottom: 20px; font-weight: 500; }
+        .d::before { content: ""; min-width: 4px; height: 1.2rem; background: rgba(var(--white-raw), 0.4); margin-right: 12px; }
+        .no-padding { padding: 0 !important; }
+        .no-padding img { width: 100%; height: 100%; display: block; object-fit: cover; }
+        .center-block { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; text-align: center; padding: 20px 0; box-sizing: border-box; }
+        .center-block p { text-align: center; font-style: italic; letter-spacing: 0.03em; color: rgba(var(--white-raw), 0.75); margin-bottom: 14px; font-size: 1.05rem; line-height: 1.8; }
+        .page.center-page { justify-content: center; align-items: center; }
+        .page.center-page .center-block { height: auto; }
+        .settings-panel { position: fixed; bottom: 20px; right: 20px; z-index: 100; background: var(--panel-bg); backdrop-filter: blur(8px); padding: 12px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        select { background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px; cursor: pointer; outline: none; }
+        .nav-zone { position: absolute; top: 0; bottom: 0; width: 40%; z-index: 10; cursor: pointer; }
+        .left-zone { left: 0; } .right-zone { right: 0; }
+        .footer-nav { margin: 20px 0 60px 0; z-index: 10; }
+        .return-btn { text-decoration: none; color: rgba(var(--white-raw), 0.5); font-size: 12px; letter-spacing: 2px; padding: 12px 25px; border: 1px solid var(--border-color); transition: 0.3s; }
+        .return-btn:hover { background: var(--text-main); color: var(--bg); }
+        .spoiler-active img { filter: blur(60px) grayscale(1); transition: 0.3s; }
+        .revealed img { filter: blur(0) grayscale(0) !important; }
+        .spoiler-active:not(.revealed)::after { content: "SPOILER: CLICK TO REVEAL"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 12px 20px; font-size: 11px; letter-spacing: 2px; z-index: 20; pointer-events: none; border: 1px solid #555; }
+        #sandbox { position: fixed; visibility: hidden; top: -9999px; left: -9999px; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <div class="settings-panel">
+        <span>SPREAD RATIO:</span>
+        <select id="ratioSelect" onchange="updateRatio(this.value)">
+            <option value="1.33">4:3 (Default)</option>
+            <option value="1.5">3:2</option>
+            <option value="1.25">5:4</option>
+        </select>
+    </div>
+    <div id="sandbox"></div>
+    <div class="book-container">
+        <main class="book-spread" id="spreadElement">
+            <div class="nav-zone left-zone" onclick="prevPage()"></div>
+            <div class="nav-zone right-zone" onclick="nextPage()"></div>
+            <div id="spread-content-area" style="display: contents;"></div>
+        </main>
+    </div>
+    <footer class="footer-nav"><a href="index.html" class="return-btn">RETURN TO MENU</a></footer>
+<script>
+    const PARSED_ELEMENTS = [{"type":"text","data":"<p>Nestled among the endless rows of shops in the heart of the city stood a compact cat store painted in lively shades of yellow, orange, and red.</p>"},{"type":"text","data":"<p>Within the cat store is a messy environment that has quite a beautiful aesthetic on its own.</p>"},{"type":"text","data":"<p>Scratched calendars hung on walls that marked the correct date, the 16th of June.</p>"},{"type":"text","data":"<p>Cat toys were scattered all over the floor.</p>"},{"type":"text","data":"<p>Customers surveyed the store.</p>"},{"type":"text","data":"<p>One customer was a little boy. He gave a fat orange cat belly rubs and got what he deserved: his hand clawed by the agitated feline.</p>"},{"type":"text","data":"<p>He was immature and reckless, given his age.</p>"},{"type":"text","data":"<p>But he's a rookie.</p>"},{"type":"single-img","url":"image\\06/1.jpg"},{"type":"text","data":"<p>Cats sat all around him, on top of him, and underneath him. Three sat on his lap, one perched on his shoulder, two rested on his armrests, and one balanced on his head. Talk about attracting pussies.</p>"},{"type":"text","data":"<p class=\"d\">EMPLOYEE: “Sir, you've been sitting here for almost an hour.”</p>"},{"type":"text","data":"<p class=\"d\">EMPLOYEE: “You're disturbing other customers, they...”</p>"},{"type":"text","data":"<p class=\"d\">EMPLOYEE: “They wanna see the cats too.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Can you give me five more minutes?”</p>"},{"type":"text","data":"<p class=\"d\">EMPLOYEE: “Sir, please. The cats not wanting to leave you is a trouble on its own.”</p>"},{"type":"text","data":"<p>Win tapped his chin three times. He looked like he was thoroughly analyzing what the employee had just said.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “So they like me then.”</p>"},{"type":"text","data":"<p>The employee was a high school graduate who needed to save up for college. She was sweating in frustration and her hands were flailing all over Win.</p>"},{"type":"text","data":"<p class=\"d\">EMPLOYEE: “SIR, THAT IS NOT THE POINT...”</p>"},{"type":"text","data":"<p class=\"d\">EMPLOYEE: “THE TRAFFIC OF THIS SHOP IS CLOGGED...”</p>"},{"type":"text","data":"<p>Her screaming attracted the attention of the customers here.</p>"},{"type":"text","data":"<p>She was not angry, but more like she was panicking, as if, if Win did not leave, a meteor would land right on them.</p>"},{"type":"text","data":"<p>Surely, no meteor came. Something greater did.</p>"},{"type":"text","data":"<p>Behind the frustrated, trembling employee was a towering woman in her 60s.</p>"},{"type":"text","data":"<p>Obese, white hair tied into a bun, and wearing a simple pink dot-pattern skirt, the MANAGER tag sat proudly on her chest.</p>"},{"type":"text","data":"<p>She pushed her employee to her side.</p>"},{"type":"text","data":"<p>Then, she let out a huff of steam like some sort of angry cartoon character.</p>"},{"type":"text","data":"<p class=\"d\">MANAGER: “Sir, do you mind leaving this store? :]”</p>"},{"type":"single-img","url":"image\\06/stare.jpg"},{"type":"text","data":"<p class=\"d\">WIN: “You want me to leave the store?”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Why don't you just say so?”</p>"},{"type":"text","data":"<p>He got up from the couch.</p>"},{"type":"text","data":"<p>Two of the cats trailed behind him. The entrance door opened with a chime of the bell overhead. The door gently slammed shut.</p>"},{"type":"text","data":"<p>The cats that were pursuing him stood short of the door.</p>"},{"type":"text","data":"<p>One left for food and the other licked its paws.</p>"},{"type":"text","data":"<p>Everyone witnessing the interaction just now stood in shock at how easy it was to get that bothersome guy to leave by just... being straightforward.</p>"},{"type":"text","data":"<p>Either he was too much of an airhead, or the menacing appearance of the lady manager herself made him leave.</p>"},{"type":"text","data":"<p>Though given how nice she was and how bluntly he was speaking, it has got to be the former.</p>"},{"type":"text","data":"<p>Win walked down the street with his head down. It started pouring right at rush hour, turning the packed sidewalk into a complete logjam of people trying to get out of the rain.</p>"},{"type":"text","data":"<p>Win stopped dead in the middle of the crowd. He squatted down right there and tossed some food to a stray cat by a trash bin.</p>"},{"type":"text","data":"<p class=\"d\">BYSTANDER 1: “Move it, asshole! You're blocking the whole walkway!”</p>"},{"type":"text","data":"<p class=\"d\">BYSTANDER 2: “Seriously? Get out of the way, it's crowded enough!”</p>"},{"type":"text","data":"<p>People shoved past him, nearly knocking him over. Win tried to scoop the cat up to take it with him.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Come here, let's just—”</p>"},{"type":"text","data":"<p>The cat hissed and bolted into a random alley. Before Win could even stand up, a heavy briefcase smacked him directly in the skull.</p>"},{"type":"text","data":"<p class=\"d\">BYSTANDER 3: “Watch where you're crouching, dumbass!”</p>"},{"type":"text","data":"<p>Win rubbed his throbbing head, quickly bowing to the angry crowd.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Sorry! My bad, sorry!”</p>"},{"type":"text","data":"<p>He got back on his feet and started walking again, blending into the heavy foot traffic. He stared blankly at the pavement as his head stung.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “I wonder what led me here in the first place...”</p>"},{"type":"text","data":"<p>He pulled out his phone. The screen lit up with a bunch of notifications.</p>"},{"type":"text","data":"<p><strong>Missed Call -- Kj (3)</strong></p>"},{"type":"text","data":"<p><strong>Missed Call -- Sai (2)</strong></p>"},{"type":"text","data":"<p class=\"d\">WIN: “Oh.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “But where the hell could the location be...?”</p>"},{"type":"text","data":"<p>Win learned his lesson from getting smacked earlier. He stepped out of the heavy foot traffic, pressing his back against the glass window of a storefront so people could pass him by. He scanned the row of shops down the street, but nothing looked right. Giving up, he pulled out his phone again.</p>"},{"type":"text","data":"<p>“WIN!”</p>"},{"type":"text","data":"<p>Win turned around and looked through the glass window he was just leaning on. Sai was slouching deep in a booth right there. Next to him, Kj was clearing out her fifth plate of food.</p>"},{"type":"text","data":"<p>Win walked into the restaurant. A guy in a sharp formal suit stepped in front of him, asking if he had a reservation, but Win completely ignored him and walked straight past. He pulled out a chair at the booth and sat down.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Where's Andy?”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “I should be the one asking.”</p>"},{"type":"text","data":"<p>Sai pointed a thumb at the stack of plates.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “Why are you late? Look at Kj.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “Five minutes later and she would've started eating this shop's wallpaper.”</p>"},{"type":"text","data":"<p>Kj kept chewing, talking with her mouth completely full of food.</p>"},{"type":"text","data":"<p class=\"d\">KJ: “This shop doesn't use wallpaper though.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “That's not the fucking point...”</p>"},{"type":"text","data":"<p>Win shrugged.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “I was at a cat store.”</p>"},{"type":"text","data":"<p>Sai stopped and just stared at him. He leaned forward, grabbed his drink, and took a slow sip from the straw without breaking eye contact.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “...And you spent an hour there?”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “I love cats.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “They're good company.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “They're nice people.”</p>"},{"type":"text","data":"<p>Kj swallowed her food and looked at him like he was an idiot.</p>"},{"type":"text","data":"<p class=\"d\">KJ: “Cats aren't people.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Well, they bring the best of luck.”</p>"},{"type":"text","data":"<p>A waiter in a uniform walked up to the table, pulling out a small notepad. He looked at Win, waiting for the order.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Carbonara spaghetti...”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Oh, and can you get me an empty receipt, please?”</p>"},{"type":"text","data":"<p>The waiter stopped writing. He paused for a second, then just nodded and walked away to place the order.</p>"},{"type":"text","data":"<p>Sai took a deep, three-second breath, holding it before letting out an equally long exhale. He picked up his fork and nudged at the piece of cold steak around his plate.</p>"},{"type":"text","data":"<p>A moment later, a different restaurant employee dropped a blank slip of white receipt paper onto the table. Win bowed his head slightly in thanks. He picked up the paper and immediately began folding it into strange, sharp geometric shapes.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “You look bothered about something.”</p>"},{"type":"text","data":"<p class=\"d\">KJ: “Read the room, Win.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “No, it's just that...”</p>"},{"type":"text","data":"<p>Sai cut off a small chunk of the cold steak and shoved it into his mouth, chewing slowly.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “I thought getting Andy back here would mean for something different.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “At this rate, we're all gonna wake up one day as sex-slaves wrapped in latex clothes.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “The war thing?”</p>"},{"type":"text","data":"<p>Win began tearing the folded papers. He then picked up one tiny piece of the shredded paper and carefully dropped it into his chest pocket, feeding something hidden inside.</p>"},{"type":"text","data":"<p class=\"d\">KJ: “Sai, I thought we're struggling with supplies too.”</p>"},{"type":"text","data":"<p class=\"d\">KJ: “But as low as our dignities are, we don't go around attacking other people...”</p>"},{"type":"text","data":"<p class=\"d\">KJ: “So I think we're safe.”</p>"},{"type":"text","data":"<p>The waiter returned, setting a steaming plate of carbonara right in front of Win.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “We're not struggling.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “At least, not with the supplies.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “That's the exact reason I can't be bothered to calm down.”</p>"},{"type":"text","data":"<p>Sai sliced two more pieces off his steak. He dropped one onto Win's new plate of pasta and tossed the other onto Kj's massive pile of food.</p>"},{"type":"single-img","url":"image\\06/2.jpg"},{"type":"text","data":"<p class=\"d\">SAI: “I care about all of you.”</p>"},{"type":"text","data":"<p>Kj's chewing slowed down.</p>"},{"type":"text","data":"<p class=\"d\">KJ: “I knew it.”</p>"},{"type":"text","data":"<p class=\"d\">KJ: “There was an ulterior motive to treating us for a meal.”</p>"},{"type":"text","data":"<p>Win pushed the last of the receipt down into his chest pocket whilst his other hand worked on his spaghetti.</p>"},{"type":"text","data":"<p class=\"d\">WIN: “But how, though?”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “What are you even going to do?”</p>"},{"type":"text","data":"<p>Sai set his fork and knife down across his empty plate. He hadn't finished his food, leaving the greens completely untouched.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “Well, I did dip my feet in hot water from helping Andy.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “There's this organization called O.S.I.R.I.S.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “The formality, the badge, and their name is like a marketing brand where they scream ‘I’m with the Government.’”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “It's a shot in the dark but... I suppose they have some sort of influence on our bounty.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “If we can get them to drag our reputation off the spotlight... everyone lives to see another day.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “And I plan to take that by sheer force.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Sheer force?”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Dude, just negotiate with them.”</p>"},{"type":"text","data":"<p>Sai leaned forward over the table, resting his elbows on the wood and covering his mouth with both hands in a pensive pose.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “That'd be impossible.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “Because you don't trust them...?”</p>"},{"type":"text","data":"<p>Sai used his finger to slowly push his glasses up the bridge of his nose.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “Correct.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “...Let me try then.”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “You just sit back and relax, I'll do it.”</p>"},{"type":"text","data":"<p>Sai took off his glasses, fogged the lenses with his breath, and wiped them clean with a paper napkin from the table. He slipped them back on and gave a single nod.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “So, what you’re going to do is attract some attention...”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “Blow up a bomb... Steal a purse... Anything petty but not overdone.”</p>"},{"type":"text","data":"<p>Kj stopped her fork halfway to her mouth.</p>"},{"type":"text","data":"<p class=\"d\">KJ: “How is blowing up a bomb considered petty...”</p>"},{"type":"text","data":"<p class=\"d\">WIN: “But you said attracting attention should be the last thing we’re going to do.”</p>"},{"type":"text","data":"<p class=\"d\">SAI: “If it helps us in the long run, it’s a risk I’m willing to take.”</p>"},{"type":"text","data":"<p>Win stood up, gave Sai a quick thumbs-up, and immediately went out the exit.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “Hey wait, Win— where are you going? I didn’t even tell you where you should be—”</p>"},{"type":"text","data":"<p>Win vanished out the front door. Sai leaned completely out of the booth, shouting across the restaurant.</p>"},{"type":"text","data":"<p class=\"d\">SAI: “WIN? HEY WIN, COME BACKKK WIIIINNN”</p>"},{"type":"center","data":"<div class=\"center-block\"><p><strong>...</strong></p></div>"},{"type":"text","data":"<p class=\"d\">VEN: \"I never realize how much I cherished something until I lose it.\"</p>"},{"type":"text","data":"<p>He sat on a bench inside the dusty, dimly lit morgue. He slouched with his legs spread wide, gently holding a single rose.</p>"},{"type":"text","data":"<p>Nearby, a metal tag hung from the charred toe of a sheeted body.</p>"},{"type":"text","data":"<p><strong>'MV-31-0510'</strong></p>"},{"type":"text","data":"<p><strong>'Miguel Reyes'</strong></p>"},{"type":"text","data":"<p>...It’s the tag.</p>"},{"type":"text","data":"<p>If he didn't look at it, he was fine. So he wasn't looking at it. He was looking at the rose instead, which in retrospect was a stupid thing to bring, but it was either this or show up empty-handed.</p>"},{"type":"text","data":"<p><em>Creaaaakkk...</em></p>"},{"type":"text","data":"<p>The forensic technician on duty stepped inside. He stretched the rubber glove on his left hand and let it snap against his wrist as he walked over to unit MV-31-0510.</p>"},{"type":"text","data":"<p>He gripped the handle and pulled the heavy metal morgue tray out of the refrigerated wall.</p>"},{"type":"text","data":"<p>He pulled back the white sheet, grabbed a clipboard and began conducting the post-mortem examination.</p>"},{"type":"text","data":"<p>The technician didn't acknowledge him at all, that’s fine. Ven didn't acknowledge him either. That is until —</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: \"You could’ve at least waited for the funeral to bring the rose.\"</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Guy-dude died not from the burns.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “...?”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “There's a gaping wound through his temples.”</p>"},{"type":"text","data":"<p>Raymond sighed, pulling his hands back from the metal tray.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “That's actually good news, depending on your relationship with him.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “What do you mean?”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Most people don't enjoy burning alive.”</p>"},{"type":"text","data":"<p>Ven looked back down at the rose.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Though judging from the hole in his head, I can't imagine this was much of an improvement.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “...Are you done?”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Yeah, I'm about to finish up.”</p>"},{"type":"text","data":"<p>Raymond pushed the tray back into the wall. It didn't really budge. He tried it again, giving it a stronger shove this time.</p>"},{"type":"text","data":"<p>The corpse fell onto the floor.</p>"},{"type":"text","data":"<p>Raymond stood there for a second, then crouched down. He got his arms under Miguel and heaved him back onto the tray. He pushed the tray up slightly before shoving it in this time.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Oh, right, I forgot to tell you.”</p>"},{"type":"text","data":"<p>Raymond shifted his weight, leaning back against the edge of the metal examination table.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “They opened a new case. Gang violence involving a high-value asset for us, so it goes without saying.”</p>"},{"type":"text","data":"<p>He tilted his head towards the corpse.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Naturally, they want you on it.”</p>"},{"type":"text","data":"<p>Ven watched a tiny drop of blood well up where the thorn pricked him, only realizing just now.</p>"},{"type":"text","data":"<p>He wiped it against his thigh. These tiny inconveniences felt like being dealt a shit hand of cards.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Which brings me to my professional medical opinion.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “...”</p>"},{"type":"text","data":"<p>Raymond peeled off his rubber gloves and tossed them onto a nearby counter.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Take some antidepressants.”</p>"},{"type":"text","data":"<p>Raymond pushed the morgue tray back into the refrigerated wall.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Can't expect yourself to perform when your head is 'down' there, right?”</p>"},{"type":"text","data":"<p>Once again, Ven looked at his rose. He snapped the stem off.</p>"},{"type":"text","data":"<p class=\"d\">VEN: “How about this.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “I'll also assign you on the case.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: \"Huh?\"</p>"},{"type":"text","data":"<p class=\"d\">VEN: “Clean this mess up and meet me outside.”</p>"},{"type":"text","data":"<p>He left the room.</p>"},{"type":"text","data":"<p>Raymond wiped his hands down with a rag, tossing his gloves into the bin. He caught up with Ven just outside the morgue, walking behind him.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “So? The hell do you want me to do?”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “You know what to do.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “...Is it because I dropped your friend's corpse?”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “You should watch your mouth next time. Be professional, or respectful, at the very least.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “And I don't want to hear you complain.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “I came here to work and spin my life around.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Complaining would do me no good.”</p>"},{"type":"text","data":"<p class=\"d\">VEN: “And if this job still has you unhappy with life?”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Then I'll figure out a different way to live.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Because I'm still experimenting.”</p>"},{"type":"text","data":"<p>He pats Ven on the shoulder before leaving.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “OSIRIS won't be the end of me, so I hope it won’t be the end of yours either.”</p>"},{"type":"center","data":"<div class=\"center-block\"><p><strong>...</strong></p></div>"},{"type":"text","data":"<p>Ever been to a strip club? This kind was discreet. Yet inside, it never failed to be a place where all sorts of fuckers come to fuck, get drunk, hit up some drugs.</p>"},{"type":"text","data":"<p>A woman spun slow around the pole near the back, her movements were sloppy. Well, tired is the better word, actually.</p>"},{"type":"text","data":"<p>Word around was she had a kid at home.</p>"},{"type":"text","data":"<p class=\"d\">CUSTOMER: “Damn shame for her son, huh?”</p>"},{"type":"text","data":"<p class=\"d\">CUSTOMER: “Heheh, yeah. Shame.”</p>"},{"type":"text","data":"<p>Closer to the bar, another dancer sat off to the side on a break, arms crossed over her knees. She had faint lines crossed all over her forearm. It’s hard to go at least a week or two clean. Unfortunate for her.</p>"},{"type":"text","data":"<p>Someone near the back was going on about God and religion, laughing about something Raymond didn't catch the details of. Surely can’t be any good when you pair religion with a strip club.</p>"},{"type":"text","data":"<p>Most eyes in the room were glued to the stage. A few were on Raymond, though, they fear a cop is about to bust them down.</p>"},{"type":"text","data":"<p>Raymond made his way to the bar and sat on a stool.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Nice glow up.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Half of your face at least, I really like how shrivelled they look.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “And pairing it with that uniform??? Shit… you should be a model.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Or a Batman villain.”</p>"},{"type":"text","data":"<p>The bartender was pouring a glass of wine. He slid the glass across to a client. He grabbed another empty glass before he even looked up.</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “Fuck off.”</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “You cops already wrongly fucked my life over. What do I owe you for helping you people?”</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “…And how’d you get past my bouncer out front?”</p>"},{"type":"text","data":"<p>Raymond slammed a folder of documents onto the bar top.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “I’ll pay you. A hefty stack.”</p>"},{"type":"text","data":"<p>Francisco's eyes flicked from the folder to Raymond's face. Then he took the glass in his hand and slammed it against the bar's edge, shattering it, holding the jagged remains up toward Raymond like a blade.</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “So what, a little ‘tada,’ and you think that buys you my help?”</p>"},{"type":"text","data":"<p>Raymond stared at the shards scattering over the counter.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “You can cry however much you'd like. That won't change the fact that time passes anyway.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “You're too materialistic for your own good. That's exactly the kind of thinking that breeds pussies roaming the streets outside.”</p>"},{"type":"text","data":"<p>Francisco's grip on the broken glass shook.</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “You OSIRIS pricks are more like a stray faction than cops.”</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “Because of you people I lost my entire net worth. Five years in a cell. For helping you.”</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “And every time, it's the same story with you fucks! Murder, violence, and everyone else gets dragged into the mess after…!”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Yep. We tend to resort to violence.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “All the more reason it’s smarter to comply.”</p>"},{"type":"text","data":"<p>Francisco hurled the glass down onto the floor.</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “The fucking audacity to call me ‘materialistic.’”</p>"},{"type":"text","data":"<p>He turned and walked toward the backroom, pulling a cigarette from his shirt pocket.</p>"},{"type":"text","data":"<p>Raymond stood there for a second, watching him go, before speaking anyway. He was rather unsure if Francisco could even hear him from back there, but that doesn’t matter.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “You can cry. You can pray to God. You can lay down and disassociate.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “But in the world we're in, the only thing that matters is brute force.”</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “You're gonna act, or you're not. That's all there is to it.”</p>"},{"type":"text","data":"<p>A hand suddenly gripped the back of Raymond's head and slammed it down into the broken glass scattered across the counter. Shards bit into his cheek, and one even caught him right in the eye.</p>"},{"type":"text","data":"<p class=\"d\">THUG: “Who's this nice guy handing out advice, acting all friendly now?”</p>"},{"type":"text","data":"<p class=\"d\">THUG: “You've been bothering everyone in here.”</p>"},{"type":"text","data":"<p class=\"d\">THUG: “How about you take a grip on your own fate right now? You can walk out with a face like a blobfish, or you don't walk out at all.”</p>"},{"type":"text","data":"<p>Raymond managed to clutch on a shard off the counter. He stabbed the man’s forearm, causing him to reel back in pain.</p>"},{"type":"text","data":"<p>The thug yanked the glass out and tossed it aside. He swung a punch.</p>"},{"type":"text","data":"<p>Raymond ducked the first hit only to take the second hit onto his jaw. They traded punch for punch. A punch connected clean with Raymond's mouth, snapping a molar loose.</p>"},{"type":"text","data":"<p>Blood begun pouring from his mouth and nose.</p>"},{"type":"text","data":"<p>The thug tackled Raymond. He pinned him against the wall using his elbow.</p>"},{"type":"text","data":"<p>Though, Raymond spat on his face. He pulled a gun from his pocket, and put six rounds into the man before he could make Raymond black out.</p>"},{"type":"text","data":"<p>A few of the patrons who'd been watching exchanged looked at him with a hint of disapproval.</p>"},{"type":"text","data":"<p class=\"d\">BYSTANDER: “…He’s playing dirty.”</p>"},{"type":"text","data":"<p>Raymond raised his gun once more. He swept it slowly across the room. A gesture that asked if anyone wants to end up like this corpse swimming in his own blood.</p>"},{"type":"text","data":"<p>Everyone left the scene, pretending like nothing happened.</p>"},{"type":"text","data":"<p>He grabbed the folder off the bar, and walked toward the backroom.</p>"},{"type":"text","data":"<p>As for the backroom, it turned out to be a cramped kitchenette and living room hybrid. Perfect for someone who had lost everything.</p>"},{"type":"text","data":"<p>A few decorations were scattered at awkward, random angles. What bothered Raymond most was how the colors and materials clashed, refusing to complement one another in any way.</p>"},{"type":"text","data":"<p>At the far end, a curtain of dangling metal beads hovered over the toilet door, which was already open by a crack.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “So you helping me or not?”</p>"},{"type":"text","data":"<p>Francisco spoke from inside.</p>"},{"type":"text","data":"<p class=\"d\">FRANCISCO: “I don’t got anything for you.”</p>"},{"type":"text","data":"<p><strong>BANG</strong></p>"},{"type":"text","data":"<p>The gunshot made Raymond jump. He kicked the door open.</p>"},{"type":"text","data":"<p>Francisco sat slumped on the toilet seat with his gun dangling from a loose grip. Blood ran slow from a hole in the center of his forehead.</p>"},{"type":"text","data":"<p>Raymond stood there for a while and let out a displeased sigh.</p>"},{"type":"text","data":"<p>The world keeps moving without regard. Even if you shoot yourself in the head.</p>"},{"type":"text","data":"<p>He turned and walked back out into the club. The staff were already busy lugging the thug’s body toward the back exit.</p>"},{"type":"text","data":"<p class=\"d\">RAYMOND: “Got another body you have to clean in the toilet back there.”</p>"},{"type":"single-img","url":"image\\06/extras.jpg"}];
+    let PAGINATED_PAGES = [];
+    let currentSpread = 0;
+
+    function reflowContent() {
+        if (PARSED_ELEMENTS.length === 0) return;
+
+        if (window.innerWidth <= 900 && window.innerHeight > window.innerWidth) {
+            PAGINATED_PAGES = [];
+            let blockBuffer = "";
+            PARSED_ELEMENTS.forEach(el => {
+                if (el.type === 'paired-double') {
+                    if (blockBuffer !== "") { PAGINATED_PAGES.push({ type: 'text', data: blockBuffer }); blockBuffer = ""; }
+                    PAGINATED_PAGES.push({ type: 'single', data: '<img src="' + el.left + '">' });
+                    PAGINATED_PAGES.push({ type: 'single', data: '<img src="' + el.right + '">' });
+                } else if (el.type === 'single-img') {
+                    if (blockBuffer !== "") { PAGINATED_PAGES.push({ type: 'text', data: blockBuffer }); blockBuffer = ""; }
+                    PAGINATED_PAGES.push({ type: 'single', data: '<img src="' + el.url + '">' });
+                } else if (el.type === 'center') {
+                    if (blockBuffer !== "") { PAGINATED_PAGES.push({ type: 'text', data: blockBuffer }); blockBuffer = ""; }
+                    PAGINATED_PAGES.push({ type: 'center', data: el.data });
+                } else {
+                    blockBuffer += el.data || el;
+                }
+            });
+            if (blockBuffer !== "") PAGINATED_PAGES.push({ type: 'text', data: blockBuffer });
+            currentSpread = 0;
+            updateUI();
+            return;
+        }
+
+        const bookSpread = document.querySelector('.book-spread');
+        const spreadWidth = bookSpread.clientWidth;
+        if (!spreadWidth || spreadWidth === 0) { requestAnimationFrame(() => reflowContent()); return; }
+
+        const ratio = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--spread-ratio')) || 1.33;
+        const spreadHeight = spreadWidth / ratio;
+        const targetWidth = (spreadWidth / 2) - 1;
+        const pageHeight = spreadHeight - 2;
+
+        const sandbox = document.getElementById('sandbox');
+        sandbox.innerHTML = '<article class="page" style="width:' + targetWidth + 'px; height:' + pageHeight + 'px; padding:60px 80px; box-sizing:border-box; overflow:hidden;"><div class="content" id="sand-c" style="width:100%; height:100%; overflow:hidden;"></div></article>';
+        const sandC = document.getElementById('sand-c');
+        const maxHeight = sandC.offsetHeight;
+
+        if (!maxHeight || maxHeight === 0) {
+            sandbox.innerHTML = "";
+            requestAnimationFrame(() => reflowContent());
+            return;
+        }
+
+        PAGINATED_PAGES = [];
+        let currentPageBuffer = "";
+
+        function flushTextBuffer() {
+            if (currentPageBuffer !== "") {
+                PAGINATED_PAGES.push({ type: 'text', data: currentPageBuffer });
+                currentPageBuffer = "";
+            }
+        }
+
+        PARSED_ELEMENTS.forEach(element => {
+            if (element.type === 'paired-double') {
+                flushTextBuffer();
+                if (PAGINATED_PAGES.length % 2 !== 0) PAGINATED_PAGES.push({ type: 'empty', data: "" });
+                PAGINATED_PAGES.push({ type: 'single', data: '<img src="' + element.left + '">' });
+                PAGINATED_PAGES.push({ type: 'single', data: '<img src="' + element.right + '">' });
+                return;
+            }
+            if (element.type === 'single-img') {
+                flushTextBuffer();
+                PAGINATED_PAGES.push({ type: 'single', data: '<img src="' + element.url + '">' });
+                return;
+            }
+            if (element.type === 'center') {
+                flushTextBuffer();
+                PAGINATED_PAGES.push({ type: 'center', data: element.data });
+                return;
+            }
+            let inlineMarkup = element.data;
+            sandC.innerHTML = currentPageBuffer + inlineMarkup;
+            if (sandC.scrollHeight > maxHeight && currentPageBuffer !== "") {
+                PAGINATED_PAGES.push({ type: 'text', data: currentPageBuffer });
+                currentPageBuffer = inlineMarkup;
+            } else {
+                currentPageBuffer += inlineMarkup;
+            }
+        });
+
+        flushTextBuffer();
+        sandbox.innerHTML = "";
+        currentSpread = 0;
+        updateUI();
+    }
+
+    function renderPage(pageData, id) {
+        if (!pageData) return '<article class="page" id="' + id + '"></article>';
+        if (pageData.type === 'single') return '<article class="page no-padding" id="' + id + '">' + pageData.data + '</article>';
+        if (pageData.type === 'center') return '<article class="page center-page" id="' + id + '"><div class="content">' + pageData.data + '</div></article>';
+        if (pageData.type === 'text') return '<article class="page" id="' + id + '"><div class="content">' + pageData.data + '</div></article>';
+        return '<article class="page" id="' + id + '"></article>';
+    }
+
+    function updateUI() {
+        const container = document.getElementById('spread-content-area');
+        container.innerHTML = "";
+        if (PAGINATED_PAGES.length === 0) return;
+        const isMobileView = window.innerWidth <= 900 && window.innerHeight > window.innerWidth;
+        const bookSpreadElement = document.getElementById('spreadElement');
+        if (isMobileView) {
+            bookSpreadElement.style.display = "block"; bookSpreadElement.style.border = "none";
+            const currentItem = PAGINATED_PAGES[currentSpread]; if (!currentItem) return;
+            if (currentItem.type === 'single') { container.innerHTML = '<article class="page no-padding">' + currentItem.data + '</article>'; }
+            else if (currentItem.type === 'center') { container.innerHTML = '<article class="page center-page"><div class="content">' + currentItem.data + '</div></article>'; }
+            else { container.innerHTML = '<article class="page"><div class="content">' + currentItem.data + '</div></article>'; }
+            handleSpoilerState(container); return;
+        }
+        bookSpreadElement.style.display = "grid"; bookSpreadElement.style.border = "1px solid var(--border-light)";
+        const leftIndex = currentSpread * 2; const rightIndex = leftIndex + 1;
+        const leftPageData = PAGINATED_PAGES[leftIndex]; const rightPageData = PAGINATED_PAGES[rightIndex];
+        let leftHtml = renderPage(leftPageData, 'L-PAGE');
+        let rightHtml = rightPageData ? renderPage(rightPageData, 'R-PAGE') : '<article class="page" id="R-PAGE" style="display:none;"></article>';
+        container.innerHTML = leftHtml + rightHtml;
+        handleSpoilerState(container);
+    }
+
+    function handleSpoilerState(container) {
+        const isSpoilerOn = localStorage.getItem('spoiler-mode') === 'true';
+        const pages = container.querySelectorAll('.page');
+        pages.forEach(page => {
+            if (isSpoilerOn && page.classList.contains('no-padding')) {
+                page.classList.add('spoiler-active');
+                page.onclick = (e) => { if (page.classList.contains('spoiler-active') && !page.classList.contains('revealed')) { e.stopPropagation(); page.classList.add('revealed'); } };
+            }
+        });
+    }
+
+    function nextPage() {
+        const isMobileView = window.innerWidth <= 900 && window.innerHeight > window.innerWidth;
+        const activeSpoiler = document.querySelector('.spoiler-active:not(.revealed)');
+        if (activeSpoiler) { activeSpoiler.classList.add('revealed'); return; }
+        if (isMobileView) { if (currentSpread + 1 < PAGINATED_PAGES.length) { currentSpread++; updateUI(); window.scrollTo({ top: 0 }); } }
+        else { if ((currentSpread + 1) * 2 < PAGINATED_PAGES.length) { currentSpread++; updateUI(); window.scrollTo({ top: 0 }); } }
+    }
+
+    function prevPage() { if (currentSpread > 0) { currentSpread--; updateUI(); window.scrollTo({ top: 0 }); } }
+
+    function updateRatio(val) {
+        if (val !== "1.33" && val !== "1.5" && val !== "1.25") val = "1.33";
+        document.documentElement.style.setProperty('--spread-ratio', val);
+        document.body.setAttribute('data-ratio', val);
+        localStorage.setItem('individuals-ratio', val);
+        setTimeout(() => reflowContent(), 100);
+    }
+
+    window.addEventListener('resize', () => setTimeout(() => reflowContent(), 100));
+
+    window.onload = () => {
+        if (localStorage.getItem('site-theme') === 'light') document.body.classList.add('light-theme');
+        let saved = localStorage.getItem('individuals-ratio') || "1.33";
+        if (saved !== "1.33" && saved !== "1.5" && saved !== "1.25") saved = "1.33";
+        document.getElementById('ratioSelect').value = saved;
+        updateRatio(saved);
+    };</script>
+</body>
+</html>
